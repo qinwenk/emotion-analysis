@@ -1,0 +1,4 @@
+interface:
+  display_name: "关系证据检索"
+  short_description: "补齐关系关键场景的前因后果，核对身份、覆盖范围与可复查的聊天证据"
+  default_prompt: "使用 $emotion-analysis-evidence，检索已导入聊天中的关系关键节点与卡点，补齐上下文和反证，并说明实际阅读范围。"

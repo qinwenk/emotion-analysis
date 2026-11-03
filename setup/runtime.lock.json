@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "platform": "windows-x86_64",
+  "python": "3.12.12",
+  "uv": {
+    "version": "0.9.11",
+    "url": "https://github.com/astral-sh/uv/releases/download/0.9.11/uv-x86_64-pc-windows-msvc.zip",
+    "sha256": "45a3ff2a68c246ed9fd2d9df032496c1beebe480357f356ac25d2cb144884c30"
+  },
+  "node": {
+    "version": "22.21.1",
+    "url": "https://nodejs.org/dist/v22.21.1/node-v22.21.1-win-x64.zip",
+    "sha256": "3c624e9fbe07e3217552ec52a0f84e2bdc2e6ffa7348f3fdfb9fbf8f42e23fcf",
+    "directory": "node-v22.21.1-win-x64"
+  },
+  "chatlab": "0.37.7",
+  "sqlite_native": {
+    "package_version": "12.11.1",
+    "node_abi": "127",
+    "platform": "win32-x64",
+    "url": "https://github.com/WiseLibs/better-sqlite3/releases/download/v12.11.1/better-sqlite3-v12.11.1-node-v127-win32-x64.tar.gz",
+    "sha256": "927b34496e946dc7c9a45636a03a039df72f10191ccc4960b8616d1a9319e45b"
+  },
+  "disabled_npm_install_scripts": {
+    "@google/genai@1.52.0": "preinstall only prints a no-op message",
+    "protobufjs@7.6.6": "postinstall only emits dependency version-scheme warnings",
+    "better-sqlite3@12.11.1": "replaced by the pinned, SHA256-verified Windows prebuilt binary; no node-gyp fallback"
+  },
+  "sources": {
+    "uv_checksum": "https://github.com/astral-sh/uv/releases/download/0.9.11/uv-x86_64-pc-windows-msvc.zip.sha256",
+    "node_checksum": "https://nodejs.org/dist/v22.21.1/SHASUMS256.txt",
+    "python_distribution": "https://github.com/astral-sh/python-build-standalone",
+    "python_integrity": "uv's pinned built-in Python download metadata includes the distribution checksum"
+  }
+}

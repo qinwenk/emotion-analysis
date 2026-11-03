@@ -1,6 +1,6 @@
 # ChatLab 转换与导入
 
-当前契约核实于 2026-11-03，外部依赖 `chatlab-cli 0.37.7`；运行时先看 `clb manifest`、`clb import --help`、`clb formats`，不要硬套旧版本命令。PowerShell 调用 `clb.cmd`，PATH 缺失时查找已安装的实际位置。工具来源：[ChatLab/ChatLab](https://github.com/ChatLab/ChatLab)，AGPL-3.0；本 skill 不打包 CLI 代码。
+当前契约核实于 2026-11-03，外部依赖 `chatlab-cli 0.37.7`；运行时先看 `clb manifest`、`clb import --help`、`clb formats`，不要硬套旧版本命令。完整安装器会安装该 CLI，正常通过主 skill 的 `Run-Workflow.ps1 -Tool chatlab -Arguments @(...)` 调用；下文 `clb.cmd` 示例中的各参数放入数组即可，无需系统 PATH。详见[电脑端运行说明](desktop-automation.md)。工具来源：[ChatLab/ChatLab](https://github.com/ChatLab/ChatLab)，AGPL-3.0；本 skill 不打包 CLI 代码。
 
 本版本 `manifest` 和 `formats` 不接受 `--json`；`validate/import` 用 `--json`，查询类命令使用其帮助列出的 `--format`。不要把某一命令的输出参数推广到所有命令。
 

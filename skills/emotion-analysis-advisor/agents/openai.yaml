@@ -1,0 +1,4 @@
+interface:
+  display_name: "关系判断与建议"
+  short_description: "结合聊天证据理解双方意愿、适配和卡点，给出直白温暖且能执行的下一步"
+  default_prompt: "使用 $emotion-analysis-advisor，根据已核实的聊天证据和我的补充，分析双方意愿、适配程度及当前关系卡点，并给出下一步。"

@@ -15,7 +15,11 @@ description: 用户指定联系人后，获取受支持 Windows 微信电脑端�
 
 先回应用户要获取哪个会话，以及确认恋爱意愿、判断适配、修复还是退出的目标。复用已知背景。电脑端首次运行只补必要信息：联系人、时间范围、是否已登录并同步所需记录。默认自动发现账号路径；多个账号、重名联系人或自定义存储位置无法消歧时再问。无需先询问手机系统、要求制作官方备份或重复提供 MBTI 与评分。
 
-使用已安装的合适工具和依赖；没有依赖时才补齐任务所需部分，不为了分析安装无关产品。可选加载 `chatlab-analyze` 负责证据查询、`goutoujunshi` 负责深入判断与表达；没有这两个 skill 也能按本包参考完成流程。不得把整个聊天文件作为额外上传附件发送给外部服务；工具调用只取当前判断需要的片段，并如实说明实际处理环境，不能声称模型一定离线。
+本包安装器自动配置专用运行环境及同级 `emotion-analysis-evidence`（证据检索）、`emotion-analysis-advisor`（关系判断）。按阶段加载；它们共享本 skill 的参考，不需要另装人物模拟器或长期记忆包。没有配套 skill 时仍可按本包参考完成判断。不得把整个聊天文件作为额外上传附件发送给外部服务；工具调用只取当前判断需要的片段，并如实说明实际处理环境，不能声称模型一定离线。
+
+## 安装与运行环境
+
+完整安装入口是仓库根目录 `Install.cmd` 或 `Install-Workflow.ps1`，会配置环境并安装三个 skill；仅复制本目录不等于安装完成。已有安装授权时直接完成配置与检查。主 skill 根目录 `Run-Workflow.ps1` 读取本机私有 `runtime.json`，用 `-Tool check` 检查环境、`-Tool workflow` 运行获取流程、`-Tool chatlab` 检索证据，参数用 `-Arguments` 数组传入。优先用此入口，不让新手手工找 Python、Node 或密钥，也不假定系统 PATH 正确。缺配置时定位用户下载的完整安装包并补装，别伪报已就绪。安装和环境检查不扫描微信；只有实际获取请求才运行 discover/run。具体调用见 [电脑端运行说明](references/desktop-automation.md)。
 
 ## 1. 同步与电脑端预检
 
@@ -63,4 +67,4 @@ description: 用户指定联系人后，获取受支持 Windows 微信电脑端�
 
 ## 本机与来源
 
-脚本相对本 skill 目录解析。Python 3.10+，依赖见 `requirements.txt`；Windows PowerShell 调用 `clb.cmd`，接口以本机 `clb manifest` 为准。执行工具前看 `--help`，不要把示例路径当成用户来源。流程规则、改编来源和许可证见 [蒸馏与来源](references/sources-and-distillation.md)。
+脚本相对本 skill 目录解析。通过 `Run-Workflow.ps1` 选择已配置的程序；高级手工环境需要 Python 3.10+ 和 `requirements.txt`，ChatLab 契约以实际 `manifest` 为准。执行工具前看 `--help`，不要把示例路径当成用户来源。流程规则、改编来源和许可证见 [蒸馏与来源](references/sources-and-distillation.md)。

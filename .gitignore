@@ -33,6 +33,9 @@ __pycache__/
 .venv/
 venv/
 node_modules/
+runtime.json
+/runtime/
+/install-results/
 *.log
 .DS_Store
 Thumbs.db

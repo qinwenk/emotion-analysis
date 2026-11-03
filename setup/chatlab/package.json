@@ -1,0 +1,7 @@
+{
+  "name": "emotion-analysis-private-chatlab-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Installer metadata only; ChatLab remains an external dependency.",
+  "dependencies": {"chatlab-cli": "0.37.7"}
+}

@@ -1,0 +1,5 @@
+# Windows x64 / CPython 3.12 runtime, verified with the desktop workflow.
+cryptography==50.0.2
+zstandard==0.25.0
+cffi==2.0.0
+pycparser==3.0

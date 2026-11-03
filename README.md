@@ -4,6 +4,8 @@
 
 这是一个可安装的 Codex skill，包含本地执行程序、参考资料和处理脚本。默认使用电脑端数据库；已有导出或 ChatLab 会话直接续用。官方手机备份是独立可选来源，不是必经步骤。
 
+**第一次使用：先看 [快速上手](docs/快速上手.md)。下载 ZIP、解压并双击 `Install.cmd`，自动装好运行环境和三个配套 skill；然后同步所需聊天，告诉 Codex 你想分析什么。**
+
 ## 电脑端自动流程 v1
 
 **同步所需聊天到电脑 → 检查环境与账号 → 取钥 → 稳定快照与认证解密 → 核对实际范围、解析目标会话 → 导出 → 验收导入 ChatLab → 由 agent 分析。**
@@ -53,38 +55,27 @@
 
 ## 安装
 
-需要可加载 skill 的 Codex 环境，以及：
+准备 Windows x64 电脑和已登录的 Codex，首次安装保持联网。不需要预装 Python、Node 或 Git，也不需要为本工具另填 API Key。
 
-- **Python 3.10+**：脚本依赖 `cryptography>=42.0.0` 和 `zstandard>=0.22.0`，见 [requirements.txt](skills/chat-relationship-workflow/requirements.txt)。CI 使用 Windows 与 Python 3.12。
-- **外部 ChatLab CLI 0.37.7**：本包导入与查询契约按此版本核实。CLI 需另行安装，见 [ChatLab 项目](https://github.com/ChatLab/ChatLab) 与[官方外部 Agent 文档](https://github.com/ChatLab/ChatLab/blob/main/docs/cn/ai/external-agent.md)。它不随本仓库分发。
+下载仓库 ZIP 并解压，双击 **Install.cmd**。或者把解压目录告诉 Codex：“请安装这个文件夹里的工作流，连同运行环境和配套 skill，完成环境检查。”
 
-在 PowerShell 中克隆仓库并进入目录，也可下载 ZIP 后在解压目录执行安装命令：
+安装器会完成：
 
-```powershell
-git clone https://github.com/qinwenk/emotion-analysis.git
-cd emotion-analysis
-python --version
-python -m pip install -r skills/chat-relationship-workflow/requirements.txt
-.\Install-Workflow.ps1
-```
+- 安装 `chat-relationship-workflow`、`emotion-analysis-evidence`、`emotion-analysis-advisor`：分别负责主流程、证据检索和关系判断。它们共享分析参考，不覆盖你另装的 `chatlab-analyze` 或 `goutoujunshi`。
+- 下载经 SHA256 校验的固定工具包，配置专用 Python、Node 与 **ChatLab CLI 0.37.7**，按锁定依赖安装。版本及来源见 [runtime.lock.json](setup/runtime.lock.json)。ChatLab 仍是遵循自身许可的外部依赖，由安装器下载，不随源码打包。
+- 在隔离目录检查运行环境；不读取微信、不取钥、不导入你的聊天，也不触碰现有 ChatLab 会话。
 
-安装器默认复制到 `$env:CODEX_HOME/skills/chat-relationship-workflow`；未设置 `CODEX_HOME` 时使用用户目录下的 `.codex/skills/chat-relationship-workflow`。已有同名 skill 会先备份到本仓库的 `backups/`，随后复制文件并校验哈希。它只安装工作流，不安装 Python 或 ChatLab，不读取聊天、不提取密钥、不执行导入。
+默认安装到 `$env:CODEX_HOME/skills/`；未设置 `CODEX_HOME` 时使用用户目录下的 `.codex/skills/`，沿用 [Codex skill 目录约定](https://developers.openai.com/cookbook/examples/codex/iterating-development-workflows-with-codex)。运行环境在同一父目录的 `skill-runtimes/emotion-analysis/`，旧 skill 备份在运行目录的 `backups/`。安装不更改系统 PATH、不自动提权；双击入口仅为本次 PowerShell 进程设置执行策略，不修改永久策略。
 
-也可以指定 skill 根目录：
+安装后下一轮即可调用；未识别时新开对话。更新时下载新版并再次运行安装器，复用已验证环境、备份并更新本包 skill；不会删除已有聊天。仅复制一个 skill 文件夹不会执行依赖安装，请使用完整安装入口。
+
+高级用户可在解压目录用 PowerShell 指定路径：
 
 ```powershell
-.\Install-Workflow.ps1 -SkillsRoot "D:/my-codex-skills"
+.\Install-Workflow.ps1 -SkillsRoot "D:/my-codex-skills" -RuntimeRoot "D:/emotion-runtime"
 ```
 
-外部 CLI 就绪后，先检查当前接口。Windows PowerShell 使用 `clb.cmd`：
-
-```powershell
-clb.cmd manifest
-clb.cmd formats
-clb.cmd import --help
-```
-
-不同版本的参数可能变化。`manifest` 和 `formats` 在已核实版本中不接受 `--json`；导入与查询命令按各自帮助使用输出参数。
+`-SkillsOnly` 只复制 skill，不代表环境就绪。正常使用由已安装主 skill 的 `Run-Workflow.ps1` 读取私有 `runtime.json` 调用正确程序，不要求系统 PATH 中有 `python` 或 `clb`。具体命令见[电脑端运行说明](skills/chat-relationship-workflow/references/desktop-automation.md)。
 
 ## 使用
 
@@ -107,12 +98,11 @@ clb.cmd import --help
 
 只有片段或口述也能讨论，但结论会限定在实际提供的材料内，不会声称读过完整聊天。后续补充会更新判断，不要求每次重新备份或导入。
 
-也可以在仓库根目录启动本地程序，导入完成后再由 skill 继续分析：
+安装后也可通过主 skill 的入口启动本地程序，导入完成后再由 skill 继续分析。将下例路径替换为安装后的主 skill 目录：
 
 ```powershell
-python -X utf8 skills/chat-relationship-workflow/scripts/desktop_workflow.py discover
-python -X utf8 skills/chat-relationship-workflow/scripts/desktop_workflow.py run --contact "示例联系人" --since 2026-01-01 --until 2026-10-31 --run-dir "D:/private-runs/run-001"
-python -X utf8 skills/chat-relationship-workflow/scripts/desktop_workflow.py status --run-dir "D:/private-runs/run-001"
+& 'D:/my-codex-skills/chat-relationship-workflow/Run-Workflow.ps1' -Tool check
+& 'D:/my-codex-skills/chat-relationship-workflow/Run-Workflow.ps1' -Arguments @('run', '--contact', '示例联系人', '--since', '2026-01-01', '--until', '2026-10-31', '--run-dir', 'D:/private-runs/run-001')
 ```
 
 恢复使用 `resume --run-dir ...`；已导出文件被修改会停止。自定义目录用 `--db-root`，必须指向账号 `db_storage`，不能指向 `Backup`。
@@ -124,8 +114,8 @@ python -X utf8 skills/chat-relationship-workflow/scripts/desktop_workflow.py sta
 在仓库根目录可执行校验与导入预览：
 
 ```powershell
-clb.cmd validate examples/synthetic-chat.json --json
-clb.cmd import examples/synthetic-chat.json --format chatlab --session-id emotion-analysis-synthetic-demo --dry-run --json
+& 'D:/my-codex-skills/chat-relationship-workflow/Run-Workflow.ps1' -Tool chatlab -Arguments @('validate', 'examples/synthetic-chat.json', '--json')
+& 'D:/my-codex-skills/chat-relationship-workflow/Run-Workflow.ps1' -Tool chatlab -Arguments @('import', 'examples/synthetic-chat.json', '--format', 'chatlab', '--session-id', 'emotion-analysis-synthetic-demo', '--dry-run', '--json')
 ```
 
 预览不写入聊天会话，但 CLI 可能初始化自身数据目录。正式导入由工作流在用户授权的范围内执行，并核对数量、时间、身份和代表性消息。详细约定见 [ChatLab 导入与验收](skills/chat-relationship-workflow/references/chatlab-import.md)。
@@ -160,7 +150,9 @@ python -m unittest discover -s tests -p "test_*.py" -v
 python skills/chat-relationship-workflow/scripts/desktop_db_reader.py --self-test
 ```
 
-当前共 **130 项合成测试**：112 项单元/集成测试与 18 项数据库读取自测。覆盖只读取钥的合成内存、联系人消歧、真实加密的合成数据库与日期筛选、恢复/哈希保护、ChatLab 身份和数量验收，以及原有 RMFH/protobuf 工具。另在独立数据目录运行真实 ChatLab CLI，验证首次、重复及增量导入，不访问用户会话。[GitHub Actions](.github/workflows/test.yml) 使用 Windows、Python 3.12 跑合成测试，不扫描真实微信，也不证明真实设备端到端兼容性。
+当前共 **156 项合成测试**：138 项单元/集成测试与 18 项数据库读取自测。覆盖安装恢复与路径隔离、原生组件校验与安全提取、Windows PowerShell 参数及输出传递、只读取钥的合成内存、联系人消歧、真实加密的合成数据库与日期筛选、恢复/哈希保护、ChatLab 身份和数量验收，以及原有 RMFH/protobuf 工具。另在独立数据目录运行真实 ChatLab CLI，验证首次、重复及增量导入，不访问用户会话。[GitHub Actions](.github/workflows/test.yml) 使用 Windows、Python 3.12 跑合成测试，不扫描真实微信，也不证明真实设备端到端兼容性。
+
+一体安装另经 Windows PowerShell 5.1 的真实安装、重复执行及损坏依赖恢复验证。安装器在独立用户配置中导入 5 条虚构记录并查询计数，确认数据库真正可读写。数据库原生组件从官方固定版本下载并核对 SHA256，不在下载失败后要求新手安装 Visual Studio 编译器。环境检查也验证内存数据库读写，不只看 CLI 能否启动。
 
 独立串联演练使用真正加密的合成数据库，仅替换运行时取钥接口：6 条目标记录中按日期导入 5 条，排除另一会话；恢复新增 0 条，随后实际取证、生成报告与台账并完成状态登记。此结果验证程序与 skill 的衔接，不代表已重新验证真实微信的内存取钥。
 
