@@ -1,0 +1,38 @@
+# Local conversations, analysis, exports and installer backups
+/runs/
+/verification/
+/private/
+/data/
+/input/
+/output/
+/exports/
+/backups/
+
+# Databases, backups, key material and local credentials
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.wal
+*.shm
+*.bak
+*.key
+*.pem
+*.p12
+*.pfx
+*keys*.json
+.env
+.env.*
+!.env.example
+
+# Runtime artifacts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db

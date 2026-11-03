@@ -1,0 +1,4 @@
+interface:
+  display_name: "聊天到关系洞察"
+  short_description: "从微信本地备份、解析与导入，到有证据、有互动感的双人情感分析"
+  default_prompt: "使用 $chat-relationship-workflow 引导我备份和导入聊天记录，再分析双方的情感意愿、适配程度与下一步。"
