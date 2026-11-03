@@ -1,8 +1,22 @@
 # emotion analysis
 
-把有权处理的双人聊天，从本地备份接到有依据的关系分析。
+用户指定联系人，获取电脑微信已同步的聊天，自动导入后进行有依据的关系分析。
 
-这是一个可安装的 Codex skill，包含工作流、参考资料和本地处理脚本。你可以从备份开始，也可以接着已有导出或 ChatLab 会话继续：先回答眼前的问题，再按需要补充信息，给出直白、有温度、能落实的下一步。
+这是一个可安装的 Codex skill，包含本地执行程序、参考资料和处理脚本。默认使用电脑端数据库；已有导出或 ChatLab 会话直接续用。官方手机备份是独立可选来源，不是必经步骤。
+
+## 电脑端自动流程 v1
+
+**同步所需聊天到电脑 → 检查环境与账号 → 取钥 → 稳定快照与认证解密 → 核对实际范围、解析目标会话 → 导出 → 验收导入 ChatLab → 由 agent 分析。**
+
+首版只启用 **Windows 微信 4.1.15.56、64 位 Python 3.10+、ChatLab CLI 0.37.7**。用户需要登录并完成所需聊天同步；程序不自动操作手机，不保证电脑已有手机全部历史。准确消息数量和起止时间在解密后核对。联系人重名、多账号、不支持的版本或空时间窗会明确停止，不猜选。
+
+- 自动发现常见账号目录、支持自定义路径；按备注/昵称/完整账号匹配联系人并核对本人身份。
+- 只读、限时的运行时取钥，逐库验证；密钥只在内存传递。动态枚举消息分库，原数据不修改。
+- 时间筛选、稳定消息 ID、原始字段溯源；按双方账号复用唯一 ChatLab 会话，校验、预览、导入和聚合验收。
+- 保存任务阶段，支持恢复；已导出任务先验证文件哈希。新同步记录用新任务获取，再增量导入。
+- `analysis_ready` 表示待分析；agent 完成证据检索、报告与台账后才记录 `complete`。单独执行 Python 不会自动调用大模型或生成情感报告。
+
+入口与完整参数见[电脑端自动流程](skills/chat-relationship-workflow/references/desktop-automation.md)。新版取钥适配器沿用此前验证过的算法，完成合成内存测试；**本次发布没有重新读取真实微信内存或用户聊天，不把合成通过当作所有电脑兼容保证。**
 
 ## 本轮重点：关键场景分析 v1
 
@@ -17,10 +31,10 @@
 
 2026-11-03 补充优化：保留先给直接判断、用关键场景解释意愿与适配、找主要卡点并给下一步的输出思路，篇幅与结构随问题调整。用户仍在判断是否想恋爱时，先帮助了解自己的需要；用户纠正感受后，追溯更新依赖该事件的模式、卡点、建议和本次分析文件。撤下负面推论不等于增加恋爱意愿的证据。详见[关系判断与互动表达](skills/chat-relationship-workflow/references/analysis-and-dialogue.md)。
 
-## 四步完成什么
+## 获取与分析如何衔接
 
-1. **备份并识别来源**：引导保存目标会话，检查它属于微信 RMFH 备份、桌面数据库、标准导出还是其他格式。已有材料可跳过备份。
-2. **解密、解析与导入**：在来源受支持且密钥齐备时处理副本，核对双方身份、时间、数量和消息类型，再经 ChatLab 校验、预览、导入与查询验收。
+1. **同步并检查环境**：用户登录并同步所需记录，程序检查版本和账号目录；已有导出或会话直接续用。
+2. **取钥、解密、解析与导入**：处理稳定只读快照，确认联系人和双方身份，核对实际时间、数量及类型，再经 ChatLab 校验、预览、导入与验收。官方备份分支另按格式和密钥处理。
 3. **情感分析与必要补问**：寻找关键节点和主要卡点，补齐关键场景的前因后果；深入分析与当前困境相关的情绪变化，补问最能改变建议的信息。
 4. **输出结果**：用证据解释节点、卡点与关键场景，给出针对困境的办法、局限及观察反馈。需要一句回复时先给一句，不强制完整报告。
 
@@ -31,8 +45,8 @@
 | 来源 | 本包能做什么 | 前提与限制 |
 | --- | --- | --- |
 | ChatLab 支持的明文导出或已有会话 | 按实际 CLI 契约验证、导入、核对并查询分析 | 先确认双方身份和覆盖范围；陌生格式需要独立适配，不能仅改扩展名。 |
-| 微信 RMFH 备份 | 检查容器；使用已有有效密钥进行 AES-GCM 认证解密；提供解密后 protobuf 解析器 | **不包含密钥提取器。没有已验证的 iPhone RMFH 取钥方法，也没有真实 iPhone RMFH 到 ChatLab 的端到端兼容验证。** protobuf 中的身份字段仍需核实，输出不是可直接导入的 ChatLab 标准格式。 |
-| Windows 微信 4.1 风格桌面数据库 | 对已知 schema 和布局读取稳定快照，检查数据库/WAL 认证，仅导出指定双人会话 | **需要已有的逐库派生密钥。** 不是通用 SQLCipher 解密器，不自动扫描进程或提取密钥；未知 schema 停止处理。桌面已同步记录可能少于手机历史。 |
+| 微信 RMFH 备份 | 检查容器；使用已有有效密钥进行 AES-GCM 认证解密；提供解密后 protobuf 解析器 | **不包含 RMFH 备份密钥提取器。没有已验证的 iPhone RMFH 取钥方法，也没有真实 iPhone RMFH 到 ChatLab 的端到端兼容验证。** protobuf 中的身份字段仍需核实，输出不是可直接导入的 ChatLab 标准格式。 |
+| Windows 微信 4.1.15.56 桌面数据库 | 自动只读取钥、联系人解析、范围筛选、认证读取稳定数据库/WAL 快照、目标导出与 ChatLab 验收导入 | **运行时适配严格限定该版本。** 需要本机登录和所需记录已同步；未知版本、权限不足或未知 schema 停止。电脑记录可能少于手机历史，桌面密钥不能解 RMFH 备份。 |
 | Finder/iTunes 设备备份、其他版本或未知格式 | 识别候选来源、说明缺口 | 本包没有通用设备备份导出器，也不承诺适配所有微信版本。 |
 
 备份完成、解密成功、解析完成、导入验收和完成分析是不同状态。合成测试通过不能证明真实备份兼容；媒体记录存在也不代表语音已转写、图片已理解或附件已恢复。
@@ -77,9 +91,9 @@ clb.cmd import --help
 在 Codex 中明确调用 skill，并说明对象、问题和材料位置。以下路径和人物均为占位示例，请替换为自己的授权范围：
 
 ```text
-使用 $chat-relationship-workflow。我想了解这段关系是否有双向投入。
-我已经备份了目标会话，文件夹在 D:/my-private-chat/source。
-请先检查来源，核对双方身份后，再分析最近三个月的互动。
+使用 $chat-relationship-workflow，我已经将需要的聊天同步到电脑微信。
+请获取我和“示例联系人”最近三个月的记录，导入 ChatLab，
+分析双方意愿、适配和关系卡点。结果放到 D:/private-runs/run-001。
 ```
 
 已有 ChatLab 会话时可以直接继续：
@@ -92,6 +106,16 @@ clb.cmd import --help
 ```
 
 只有片段或口述也能讨论，但结论会限定在实际提供的材料内，不会声称读过完整聊天。后续补充会更新判断，不要求每次重新备份或导入。
+
+也可以在仓库根目录启动本地程序，导入完成后再由 skill 继续分析：
+
+```powershell
+python -X utf8 skills/chat-relationship-workflow/scripts/desktop_workflow.py discover
+python -X utf8 skills/chat-relationship-workflow/scripts/desktop_workflow.py run --contact "示例联系人" --since 2026-01-01 --until 2026-10-31 --run-dir "D:/private-runs/run-001"
+python -X utf8 skills/chat-relationship-workflow/scripts/desktop_workflow.py status --run-dir "D:/private-runs/run-001"
+```
+
+恢复使用 `resume --run-dir ...`；已导出文件被修改会停止。自定义目录用 `--db-root`，必须指向账号 `db_storage`，不能指向 `Backup`。
 
 ### 先试合成示例
 
@@ -114,15 +138,16 @@ clb.cmd import examples/synthetic-chat.json --format chatlab --session-id emotio
 python skills/chat-relationship-workflow/scripts/probe_source.py --help
 python skills/chat-relationship-workflow/scripts/wechat_rmfh.py --help
 python skills/chat-relationship-workflow/scripts/desktop_export.py --help
+python skills/chat-relationship-workflow/scripts/desktop_workflow.py --help
 ```
 
-实际处理请先读[备份与来源分流](skills/chat-relationship-workflow/references/backup-and-routing.md)和[解密与解析](skills/chat-relationship-workflow/references/decrypt-and-parse.md)。原始来源保持只读，结果写入独立新目录。RMFH 备份密钥与桌面逐库派生密钥用途不同；缺少哪一种，就明确停在哪一步，不盲试密码或冒称已恢复。
+实际处理请先读[电脑端自动流程](skills/chat-relationship-workflow/references/desktop-automation.md)；其他来源再看[备份与来源分流](skills/chat-relationship-workflow/references/backup-and-routing.md)和[解密与解析](skills/chat-relationship-workflow/references/decrypt-and-parse.md)。原始来源保持只读，结果写入独立新目录。RMFH 备份密钥与桌面逐库派生密钥用途不同；缺少哪一种，就明确停在哪一步，不盲试密码或冒称已恢复。
 
 ## 数据与隐私
 
 - 只处理用户有权处理且明确指定的账号、对象和范围；不因工具可以批量导出就扫描所有联系人。
 - **不要把真实聊天、备份、数据库、密钥、账号信息或分析报告提交到公开仓库、Issue、Pull Request 或 CI。** 本仓库示例与测试只使用合成数据。运行结果和安装器备份也应保存在本地，不作为发布内容。
-- 密钥通过本地文件或支持的隐藏输入提供，不粘贴到对话中；不向外部解密网站提交密钥或完整聊天。
+- 自动取钥仅在内存传递；手工提供密钥时使用本地文件或支持的隐藏输入，不粘贴到对话中，不向外部解密网站提交密钥或完整聊天。
 - 本地脚本处理不等于模型一定离线。分析时按实际使用的 Codex、模型与工具环境处理必要片段，不能承诺聊天内容永不经过外部服务；本工作流不把整个聊天文件作为额外附件上传。
 - 导入授权不等于长期记忆授权。默认不创建人物档案、真人替身或跨任务关系记忆。
 
@@ -135,7 +160,9 @@ python -m unittest discover -s tests -p "test_*.py" -v
 python skills/chat-relationship-workflow/scripts/desktop_db_reader.py --self-test
 ```
 
-当前共 **55 项合成测试**：37 项工作流工具单元测试与 18 项桌面数据库读取自测。覆盖来源探测、认证失败不发布明文、protobuf 字段与大整数保留、目标会话导出、未知结构拒绝、数据库/WAL 完整性与只读约束等。[GitHub Actions](.github/workflows/test.yml) 使用 Windows、Python 3.12 和同样的命令，不安装 ChatLab、不访问真实聊天，也不验证真实设备端到端兼容性。
+当前共 **130 项合成测试**：112 项单元/集成测试与 18 项数据库读取自测。覆盖只读取钥的合成内存、联系人消歧、真实加密的合成数据库与日期筛选、恢复/哈希保护、ChatLab 身份和数量验收，以及原有 RMFH/protobuf 工具。另在独立数据目录运行真实 ChatLab CLI，验证首次、重复及增量导入，不访问用户会话。[GitHub Actions](.github/workflows/test.yml) 使用 Windows、Python 3.12 跑合成测试，不扫描真实微信，也不证明真实设备端到端兼容性。
+
+独立串联演练使用真正加密的合成数据库，仅替换运行时取钥接口：6 条目标记录中按日期导入 5 条，排除另一会话；恢复新增 0 条，随后实际取证、生成报告与台账并完成状态登记。此结果验证程序与 skill 的衔接，不代表已重新验证真实微信的内存取钥。
 
 关键场景的独立行为评测另见 [evals/README.md](evals/README.md)。它包含合成聊天、用户补充和人工评判标准；与上述工具单元测试分开，不通过匹配固定话术给分析判分，不将冒烟结果解释为真实聊天的准确率。
 
@@ -143,10 +170,13 @@ python skills/chat-relationship-workflow/scripts/desktop_db_reader.py --self-tes
 
 本项目原创工作流与脚本采用 [MIT 许可](LICENSE)。第三方改编与随包文件保留各自的版权声明。
 
-- [主 skill](skills/chat-relationship-workflow/SKILL.md)：四步工作流。
+- [主 skill](skills/chat-relationship-workflow/SKILL.md)：电脑自动获取到关系分析。
+- [电脑端自动流程](skills/chat-relationship-workflow/references/desktop-automation.md)：运行条件、入口、范围与恢复。
 - [关系判断与互动表达](skills/chat-relationship-workflow/references/analysis-and-dialogue.md)：证据、补问、直白反馈与有依据的希望。
 - [关键场景检索与证据](skills/chat-relationship-workflow/references/key-scenes-and-evidence.md)：时间覆盖、事件上下文、节点与卡点、用户情绪及证据记录。
 - [心理学机制与来源](skills/chat-relationship-workflow/references/psychology-mechanisms.md)：按需解释互动，不用于诊断或读心。
 - [蒸馏与来源说明](skills/chat-relationship-workflow/references/sources-and-distillation.md)：改编、借鉴和未纳入的能力。
 
 随包的 protobuf 解析器来自 [olansoft/wc4-backup-decrypt](https://github.com/olansoft/wc4-backup-decrypt)，保留[原 MIT 许可](licenses/wc4-backup-decrypt-MIT.txt)；关系分析参考中的改编内容保留 [goutoujunshi 的 MIT 许可](licenses/goutoujunshi-MIT.txt)。ChatLab CLI 是遵循其自身 **AGPL-3.0** 许可的外部依赖，本仓库不打包其代码或依赖树。再分发时请保留相应第三方版权与许可声明。
+
+桌面取钥适配器的 Config.Cipher 最小算法改编自 [TANGandXUE/wcdb-key-tool](https://github.com/TANGandXUE/wcdb-key-tool/tree/79f1b5b92e12c66aa281b4a60a3c478b5f547dfa)，保留[原 MIT 许可](skills/chat-relationship-workflow/licenses/wcdb-key-tool-MIT.txt)。

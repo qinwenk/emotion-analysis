@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Export one private chat from the known Weixin 4.1 Windows WCDB schema.
 
-Requires an existing per-database derived-key JSON file. This script does not
+Accepts verified per-database keys in memory or an existing key-map file. This script does not
 find keys, inspect processes, import into ChatLab, or export media attachments.
 Source databases are authenticated by desktop_db_reader, including their WAL.
 """
@@ -34,7 +34,111 @@ SHARD_NAME = re.compile(r'message_(\d+)\.db\Z')
 
 
 class ExportError(RuntimeError):
-    pass
+    def __init__(self, message: str, code='export_failed', details=None):
+        super().__init__(message)
+        self.code = code
+        self.details = details or {}
+
+
+def key_mapping_value(value: dict) -> dict:
+    """Accept the public key-file envelope or its in-memory databases mapping."""
+    if not isinstance(value, dict):
+        raise ExportError('Key mapping must be an object.', code='invalid_key_mapping')
+    mapping = value.get('databases') if 'databases' in value else value
+    if not isinstance(mapping, dict):
+        raise ExportError('Key mapping requires a databases object.', code='invalid_key_mapping')
+    return mapping
+
+
+def participant_id(value) -> bool:
+    return (isinstance(value, str) and 0 < len(value) <= 256 and
+            not any(ord(c) < 32 for c in value) and value != 'SYSTEM' and
+            not value.endswith('@chatroom'))
+
+
+def resolve_contact(db_root: Path, key_mapping: dict, query: str,
+                    self_id: str | None = None) -> dict:
+    """Resolve one exact contact, without fuzzy matching or guessing account identity.
+
+    An inferred owner requires both the known wxid account-folder form and its
+    exact contact record. Custom account names require an explicit owner ID.
+    Returned metadata contains only the owner and matched target, never all contacts.
+    """
+    if not isinstance(query, str) or not query.strip() or len(query) > 256 or any(ord(c) < 32 for c in query):
+        raise ExportError('Provide an exact contact name or account ID.', code='invalid_contact_query')
+    db_root = Path(db_root).expanduser().absolute()
+    reject_link_components(db_root)
+    db_root = db_root.resolve()
+    contact_path = db_root / 'contact' / 'contact.db'
+    reject_link_components(contact_path)
+    if not contact_path.is_file():
+        raise ExportError('The selected account has no supported contact database.', code='contact_database_missing')
+    mapping = key_mapping_value(key_mapping)
+    key = key_for(mapping, 'contact/contact.db', contact_path)
+    try:
+        from desktop_db_reader import read_decrypted_db, DatabaseReadError
+    except ImportError:
+        raise ExportError('The authenticated database reader is unavailable.', code='reader_unavailable') from None
+    try:
+        connection = read_decrypted_db(contact_path, key)
+    except DatabaseReadError:
+        raise ExportError('Contact database authentication or snapshot verification failed.', code='contact_database_invalid') from None
+    try:
+        tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+        matches = [table for table in tables if table.casefold() == 'contact']
+        if len(matches) != 1:
+            raise ExportError('The contact database schema is not supported.', code='contact_schema_unsupported')
+        table = quoted(matches[0])
+        columns = {row[1] for row in connection.execute('PRAGMA table_info(' + table + ')')}
+        if not {'username', 'remark', 'nick_name'}.issubset(columns):
+            raise ExportError('The contact database schema is not supported.', code='contact_schema_unsupported')
+
+        account_folder = db_root.parent.name
+        inferred = None
+        folder_match = re.fullmatch(r'(wxid_[A-Za-z0-9]+)(?:_[0-9A-Fa-f]{4})?', account_folder)
+        if folder_match:
+            inferred = folder_match[1]
+        explicit_owner = self_id is not None
+        if self_id is None:
+            self_id = inferred
+        elif not participant_id(self_id):
+            raise ExportError('Provide a valid owner account ID.', code='self_identity_required')
+        if inferred is not None and self_id != inferred:
+            raise ExportError('The provided owner ID does not match the selected account directory.', code='self_identity_mismatch')
+        if self_id is None:
+            raise ExportError('The owner cannot be inferred from this account directory; provide its confirmed account ID.', code='self_identity_required')
+        owners = connection.execute('SELECT username FROM ' + table + ' WHERE username = ? COLLATE BINARY', (self_id,)).fetchall()
+        if len(owners) > 1 or (not explicit_owner and len(owners) != 1):
+            raise ExportError('The owner account ID is not uniquely confirmed in the contact database.', code='self_identity_required')
+
+        rows = connection.execute(
+            'SELECT username,remark,nick_name FROM ' + table +
+            ' WHERE username = ? COLLATE BINARY OR remark = ? COLLATE BINARY OR nick_name = ? COLLATE BINARY',
+            (query, query, query)).fetchall()
+        if not rows:
+            raise ExportError('No contact exactly matches the requested name or ID.', code='target_not_found')
+        candidates = []
+        for username, remark, nickname in rows:
+            if (not isinstance(username, str) or
+                    any(value is not None and not isinstance(value, str) for value in (remark, nickname))):
+                raise ExportError('The contact database contains unsupported identity fields.', code='contact_schema_unsupported')
+            candidates.append({'target_id': username, 'target_remark': remark or '', 'target_nickname': nickname or ''})
+        if len(candidates) != 1:
+            raise ExportError('Several contacts match; select one account ID before proceeding.', code='target_ambiguous',
+                              details={'candidates': candidates})
+        target = candidates[0]
+        if not participant_id(target['target_id']) or target['target_id'] == self_id:
+            raise ExportError('Select one other participant in a private chat.', code='target_not_private')
+        target_name = target['target_remark'] or target['target_nickname'] or target['target_id']
+        if not isinstance(target_name, str) or len(target_name) > 256 or any(ord(c) < 32 for c in target_name):
+            raise ExportError('The contact display name is not supported.', code='contact_schema_unsupported')
+        owner_source = ('explicit_account_id_and_contact' if owners else 'explicit_account_id') if explicit_owner else 'account_directory_and_contact'
+        return {'self_id': self_id, 'self_name': '我', 'self_identity_source': owner_source,
+                'target_name': target_name, **target}
+    except sqlite3.DatabaseError:
+        raise ExportError('The contact database could not be queried using the supported schema.', code='contact_schema_unsupported') from None
+    finally:
+        connection.close()
 
 
 def is_link(path: Path) -> bool:
@@ -166,7 +270,8 @@ def raw_value(value):
     return value
 
 
-def read_shard(connection, relative, table_name, self_id, target_id, self_name, target_name):
+def read_shard(connection, relative, table_name, self_id, target_id, self_name, target_name,
+               since=None, until=None, coverage=None):
     """Known-schema adapter; accepts a read-only connection, never guesses identity."""
     connection.row_factory = sqlite3.Row
     names = [r[0] for r in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")]
@@ -179,6 +284,23 @@ def read_shard(connection, relative, table_name, self_id, target_id, self_name, 
     columns = {r[1] for r in connection.execute('PRAGMA table_info(' + quoted(table) + ')')}
     if not REQUIRED_COLUMNS.issubset(columns):
         raise ExportError(f'Unsupported target schema in {relative}; required message fields are missing.')
+    source_count, first_ts, last_ts, invalid_times = connection.execute(
+        'SELECT COUNT(*),MIN(create_time),MAX(create_time),'
+        "SUM(CASE WHEN typeof(create_time) != 'integer' OR create_time < ? OR create_time > ? THEN 1 ELSE 0 END) "
+        'FROM ' + quoted(table), (946684800, int(time.time()) + 86400)).fetchone()
+    if invalid_times:
+        raise ExportError(f'Unsupported timestamp values or units in {relative}.')
+    if coverage is not None:
+        coverage.update(source_records=source_count, available_first_timestamp=first_ts,
+                        available_last_timestamp=last_ts, target_table_present=True)
+    predicates, params = [], []
+    if since is not None:
+        predicates.append('create_time >= ?')
+        params.append(since)
+    if until is not None:
+        predicates.append('create_time <= ?')
+        params.append(until)
+    where = ' WHERE ' + ' AND '.join(predicates) if predicates else ''
     name_tables = [n for n in names if n.casefold() == 'name2id']
     if len(name_tables) != 1:
         raise ExportError(f'Missing or ambiguous Name2Id sender map in {relative}.')
@@ -189,11 +311,11 @@ def read_shard(connection, relative, table_name, self_id, target_id, self_name, 
     try:
         senders = {r[0]: r[1] for r in connection.execute(
             'SELECT rowid,user_name FROM ' + name_table +
-            ' WHERE rowid IN (SELECT DISTINCT real_sender_id FROM ' + quoted(table) + ')')}
+            ' WHERE rowid IN (SELECT DISTINCT real_sender_id FROM ' + quoted(table) + where + ')', params)}
     except sqlite3.DatabaseError:
         raise ExportError(f'The sender map in {relative} does not expose the required rowid.') from None
-    query = 'SELECT * FROM ' + quoted(table) + ' ORDER BY create_time,sort_seq,local_id'
-    for record in connection.execute(query):
+    query = 'SELECT * FROM ' + quoted(table) + where + ' ORDER BY create_time,sort_seq,local_id'
+    for record in connection.execute(query, params):
         row = dict(record)
         timestamp = integer(row['create_time'], 'create_time (Unix seconds)', 946684800, int(time.time()) + 86400)
         local_id = integer(row['local_id'], 'local_id')
@@ -227,20 +349,32 @@ def read_shard(connection, relative, table_name, self_id, target_id, self_name, 
         yield message, original, signature
 
 
-def export_chat(db_root: Path, key_file: Path, self_id: str, target_id: str, output: Path,
-                self_name='我', target_name='对方', chat_name='聊天记录') -> dict:
+def export_chat(db_root: Path, key_file: Path | None = None, self_id: str | None = None,
+                target_id: str | None = None, output: Path | None = None,
+                self_name='我', target_name='对方', chat_name='聊天记录', *,
+                key_mapping: dict | None = None, since: int | None = None,
+                until: int | None = None) -> dict:
     for value in (self_id, target_id):
-        if not value or len(value) > 256 or any(ord(c) < 32 for c in value) or value == 'SYSTEM':
+        if not participant_id(value):
             raise ExportError('Provide valid participant IDs, not display names or SYSTEM.')
     if self_id == target_id or self_id.endswith('@chatroom') or target_id.endswith('@chatroom'):
         raise ExportError('This adapter only supports two distinct participants in a private chat.')
     for value in (self_name, target_name, chat_name):
         if not isinstance(value, str) or not value.strip() or len(value) > 256:
             raise ExportError('Display names and chat name must be nonempty and at most 256 characters.')
-    db_root, key_file, output = (Path(p).expanduser().absolute() for p in (db_root, key_file, output))
-    for path in (db_root, key_file, output):
+    if (key_file is None) == (key_mapping is None):
+        raise ExportError('Provide exactly one key file or in-memory key mapping.', code='invalid_key_mapping')
+    for value in (since, until):
+        if value is not None:
+            integer(value, 'time filter (Unix seconds)', 946684800, 253402300799)
+    if since is not None and until is not None and since > until:
+        raise ExportError('The requested time range is reversed.', code='invalid_time_range')
+    if output is None:
+        raise ExportError('Provide a new output directory.')
+    db_root, output = (Path(p).expanduser().absolute() for p in (db_root, output))
+    for path in (db_root, output):
         reject_link_components(path)
-    db_root, key_file, output = (path.resolve() for path in (db_root, key_file, output))
+    db_root, output = (path.resolve() for path in (db_root, output))
     if not db_root.is_dir() or not output.parent.is_dir():
         raise ExportError('Database root and output parent must already exist as directories.')
     if output.exists():
@@ -262,7 +396,7 @@ def export_chat(db_root: Path, key_file: Path, self_id: str, target_id: str, out
     shards.sort()
     if not shards:
         raise ExportError('No supported message_N.db shards were found.')
-    keys = load_keys(key_file)
+    keys = load_keys(Path(key_file).expanduser().absolute()) if key_file is not None else key_mapping_value(key_mapping)
     table_name = 'Msg_' + hashlib.md5(target_id.encode('utf-8')).hexdigest()
     try:
         from desktop_db_reader import read_decrypted_db, DatabaseReadError
@@ -270,6 +404,11 @@ def export_chat(db_root: Path, key_file: Path, self_id: str, target_id: str, out
         raise ExportError('The authenticated reader requires the cryptography package and desktop_db_reader.py.') from None
     messages, seen = [], {}
     counts, shard_reports = Counter(), []
+    coverage = {'source_records': 0, 'available_first_timestamp': None,
+                'available_last_timestamp': None, 'requested_since': since,
+                'requested_until': until, 'selected_records': 0,
+                'full_phone_history_verified': False,
+                'scope': 'Target conversation in authenticated desktop shard snapshots; source count includes duplicate rows before deduplication.'}
     with tempfile.TemporaryDirectory(prefix='.desktop-export-', dir=output.parent) as staging_name:
         staging = Path(staging_name)
         with (staging / 'raw_messages.jsonl').open('x', encoding='utf-8', newline='\n') as raw_out:
@@ -281,9 +420,12 @@ def export_chat(db_root: Path, key_file: Path, self_id: str, target_id: str, out
                 except DatabaseReadError:
                     raise ExportError(f'Authentication, snapshot, or database validation failed for {relative}; no completed export was published.') from None
                 shard_count = 0
+                shard_coverage = {'source_records': 0, 'available_first_timestamp': None,
+                                  'available_last_timestamp': None, 'target_table_present': False}
                 try:
                     for message, original, signature in read_shard(
-                            connection, relative, table_name, self_id, target_id, self_name, target_name):
+                            connection, relative, table_name, self_id, target_id, self_name, target_name,
+                            since, until, shard_coverage):
                         stable_id = message['platformMessageId']
                         duplicate = stable_id in seen
                         if duplicate and seen[stable_id] != signature:
@@ -302,9 +444,21 @@ def export_chat(db_root: Path, key_file: Path, self_id: str, target_id: str, out
                     raise ExportError(f'Unsupported or inconsistent message schema in {relative}.') from None
                 finally:
                     connection.close()
-                shard_reports.append({'database': relative, 'records': shard_count, 'authenticated': True})
+                shard_reports.append({'database': relative, 'records': shard_count, 'authenticated': True,
+                                      **shard_coverage})
+                coverage['source_records'] += shard_coverage['source_records']
+                for field, function in (('available_first_timestamp', min), ('available_last_timestamp', max)):
+                    value = shard_coverage[field]
+                    if value is not None:
+                        coverage[field] = value if coverage[field] is None else function(coverage[field], value)
+        coverage['selected_records'] = counts['raw_records']
+        coverage['selected_unique_messages'] = len(messages)
         if not messages:
-            raise ExportError('No messages were found for the supplied target ID; confirm identity and source coverage.')
+            if coverage['source_records']:
+                raise ExportError('The target has desktop records, but none in the requested time range.',
+                                  code='empty_time_range', details={'coverage': coverage})
+            raise ExportError('No messages were found for the supplied target ID; confirm identity and source coverage.',
+                              code='target_records_not_found', details={'coverage': coverage})
         messages.sort(key=lambda message: message['timestamp'])
         document = {
             'chatlab': {'version': '0.0.2', 'exportedAt': int(time.time()),
@@ -322,6 +476,7 @@ def export_chat(db_root: Path, key_file: Path, self_id: str, target_id: str, out
             'supported_schema': 'Windows Weixin 4.1 message_N.db / Msg_md5(target_id) / Name2Id',
             'source_scope': 'All discovered message_N.db shards; only the specified private conversation. Each shard has its own authenticated snapshot, not a globally locked instant. This does not prove full phone history.',
             'owner_id': self_id, 'target_id': target_id, 'shards': shard_reports,
+            'coverage': coverage,
             'raw_records': counts['raw_records'], 'exported_messages': len(messages),
             'identical_duplicates_removed': counts['identical_duplicates_removed'],
             'wechat_server_ids': counts['wechat_server_id'],
@@ -374,14 +529,19 @@ def main() -> int:
     parser.add_argument('--self-name', default='我')
     parser.add_argument('--target-name', default='对方')
     parser.add_argument('--chat-name', default='聊天记录')
+    parser.add_argument('--since', type=int, help='Inclusive earliest Unix timestamp in seconds.')
+    parser.add_argument('--until', type=int, help='Inclusive latest Unix timestamp in seconds.')
     args = parser.parse_args()
     try:
         result = export_chat(args.db_root, args.key_file, args.self_id, args.target_id,
-                             args.output, args.self_name, args.target_name, args.chat_name)
+                             args.output, args.self_name, args.target_name, args.chat_name,
+                             since=args.since, until=args.until)
     except (ExportError, OSError, ValueError) as exc:
         # Expected errors contain only controlled diagnostics, never key/content data.
         text = str(exc) if isinstance(exc, ExportError) else 'File access or input validation failed; no success is claimed.'
-        print(json.dumps({'status': 'failed', 'error': text}, ensure_ascii=False))
+        print(json.dumps({'status': 'failed', 'error': text,
+                          'code': exc.code if isinstance(exc, ExportError) else 'invalid_input',
+                          'details': exc.details if isinstance(exc, ExportError) else {}}, ensure_ascii=False))
         return 2
     print(json.dumps({key: result[key] for key in ('status', 'exported_messages', 'system_records', 'local_source_ids', 'unsupported_type_records_preserved', 'chatlab_import_performed')}, ensure_ascii=False))
     return 0

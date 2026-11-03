@@ -1,4 +1,4 @@
 interface:
   display_name: "聊天到关系洞察"
-  short_description: "从聊天导入到关系关键节点、卡点与情绪场景深析，给出有依据的行动建议"
-  default_prompt: "使用 $chat-relationship-workflow，基于我的聊天记录找出关系关键节点和卡点，深入分析相关情绪场景，并针对我当前的困境提出办法。"
+  short_description: "电脑微信同步后自动获取目标聊天、验收导入，再分析关系节点、适配和卡点"
+  default_prompt: "使用 $chat-relationship-workflow，我已将所需聊天同步到电脑，请获取我指定联系人的记录，导入 ChatLab 后分析双方意愿、适配与关系卡点。"

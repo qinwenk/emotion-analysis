@@ -16,7 +16,7 @@ python scripts/wechat_rmfh.py decrypt --source "D:/backup/source" --key-file "D:
 
 不让用户把密钥贴入对话；用本地小文本文件或交互隐藏输入。样本密钥认证失败时不创建输出。每个文件分别认证，通过才发布到 decrypted/；unchanged/ 只是未加密或未知元数据副本。部分失败保留逐项报告，不能声称全量成功。
 
-已核查的 `olansoft/wc4-backup-decrypt` 手机端提取方案针对 Android 指定版本。本包不包含密钥提取器，也没有已验证的 iPhone RMFH 密钥获取方法。缺密钥就清楚说明该缺口，不能声称凭一个备份文件夹能绕过加密。用户自己的其他数据来源可按备份分流说明继续。
+已核查的 `olansoft/wc4-backup-decrypt` 手机端提取方案针对 Android 指定版本。本包不包含 RMFH 备份密钥提取器，也没有已验证的 iPhone RMFH 密钥获取方法；桌面运行时取钥属于另一来源。缺备份密钥就说明该缺口，不能声称凭一个备份文件夹能绕过加密。用户自己的其他数据来源可按备份分流说明继续。
 
 ## RMFH 解密后的 protobuf
 
@@ -33,6 +33,8 @@ python scripts/vendor/export_chat_messages.py "D:/analysis/run-001/decrypted-con
 本包能检查 RMFH 并使用已提供的有效密钥认证解密；解析器经过合成样本验证，真实 iPhone RMFH 到 ChatLab 的端到端兼容性仍未证实。
 
 ## Windows Weixin 4.1 风格桌面数据库
+
+默认自动入口见 [电脑端自动流程](desktop-automation.md)。`desktop_runtime.py` 在受支持的 Windows 微信 4.1.15.56 上只读取得并验证逐库密钥，内存传给导出器；`desktop_workflow.py` 串联联系人核对、范围筛选和 ChatLab 验收导入。以下手工命令仍可用于已经持有合法密钥的来源；其中导出器本身不扫描进程。
 
 配套 `scripts/desktop_db_reader.py` 只支持已核实布局：4096 字节页、80 字节保留区、Windows 小端 WAL index。它接收每库已派生的 32 字节 AES 密钥，验证 HMAC、稳定 DB/WAL/SHM 快照、已提交 WAL 和 SQLite quick_check；不是任意 SQLCipher 密码破解器。单库或 WAL 上限 1 GiB；不支持的布局停止。
 

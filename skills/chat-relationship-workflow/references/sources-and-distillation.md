@@ -1,6 +1,6 @@
 # 蒸馏与来源
 
-本工作流将已有 skill 的有效机制重新组织为“备份 → 解密解析与导入 → 证据分析与补问 → 结果”四步。它不调用真人模拟器，也不把上游未经实现的能力继承成承诺。以下依据为 2026-11-03 本机安装快照的实际文件，不代表已重新核实各仓库最新提交或星数。
+本工作流以“电脑同步 → 取钥与认证解密 → 目标解析与验收导入 → 证据分析与补问 → 结果”为主流程，官方备份另列可选分支。它不调用真人模拟器，也不把上游未经实现的能力继承成承诺。以下依据为 2026-11-03 核实的本地快照或明确固定的上游提交，不代表各仓库最新提交或星数。
 
 ## 来源与取舍
 
@@ -12,6 +12,12 @@
 | [distilly](https://github.com/titanwings/distilly) | 本地 LICENSE：MIT，Copyright (c) 2026 titanwings；package.json、CITATION.cff 一致。 | 借鉴按需加载、来源约束、场景化纠正与版本恢复思路；路径按实际 skill 根目录解析。 | 不复制代码或人物模板；不启动 owner onboarding、名人研究、采集器或强制 Persona 建档。 |
 
 狗头军师的分析参考包含改编内容，本 skill 内保留 [原 MIT 许可证](../licenses/goutoujunshi-MIT.txt)，完整交付包的 `licenses/goutoujunshi-MIT.txt` 另保留一份。再分发本包或单独分发相应改编文件时，保留该版权和许可声明。create-ex、distilly 仅作机制参考，没有复制其代码或大段模板。ChatLab CLI 是外部依赖，安装和分发遵循其自身许可。
+
+## Windows 运行时取钥适配来源
+
+`scripts/desktop_runtime.py` 的 Config.Cipher 标记、对象偏移和候选解码逻辑最小改编自 [TANGandXUE/wcdb-key-tool](https://github.com/TANGandXUE/wcdb-key-tool/commit/79f1b5b92e12c66aa281b4a60a3c478b5f547dfa)，固定提交 `79f1b5b92e12c66aa281b4a60a3c478b5f547dfa`。已通过 GitHub 连接器核实该提交许可证为 MIT，Copyright (c) 2025 CloudDreamAI / TANGandXUE，保留 [原许可](../licenses/wcdb-key-tool-MIT.txt)。
+
+本包只保留 Windows 已登录进程的有界只读扫描与逐库认证，新增版本、路径和输出约束；不打包上游的调试器、注入、跨平台或实验性入口。此前本机成功的版本为 4.1.15.56，新适配器仅启用该版本并进行合成内存测试；不据此承诺任意版本通用。密钥仅在调用进程内存传递，不包含真实密钥或账号数据。
 
 ## 随包分发的上游解析器
 

@@ -72,9 +72,9 @@ class ExportTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def export(self, output=None, missing_column=False):
+    def export(self, output=None, missing_column=False, **kwargs):
         with patch.object(desktop_db_reader, 'read_decrypted_db', side_effect=lambda path, key: connection(self.rows[path.name], missing_column)):
-            return subject.export_chat(self.root, self.key_file, SELF, TARGET, output or self.output)
+            return subject.export_chat(self.root, self.key_file, SELF, TARGET, output or self.output, **kwargs)
 
     def test_complete_adapter_output_and_source_protection(self):
         report = self.export()
@@ -104,6 +104,65 @@ class ExportTests(unittest.TestCase):
         first = json.loads((self.output / 'chatlab.json').read_text(encoding='utf-8'))['messages']
         second = json.loads((other / 'chatlab.json').read_text(encoding='utf-8'))['messages']
         self.assertEqual(first, second)
+
+    def test_in_memory_key_mapping_never_needs_a_key_file(self):
+        mapping = json.loads(self.key_file.read_text())
+        self.key_file.unlink()
+        with patch.object(desktop_db_reader, 'read_decrypted_db', side_effect=lambda path, key: connection(self.rows[path.name])):
+            report = subject.export_chat(self.root, self_id=SELF, target_id=TARGET,
+                                         output=self.output, key_mapping=mapping)
+        self.assertEqual(report['exported_messages'], 6)
+        self.assertFalse(self.key_file.exists())
+        for path in self.output.iterdir():
+            self.assertNotIn(KEY, path.read_text(encoding='utf-8'))
+
+    def test_inclusive_time_filter_preserves_coverage_and_system_record(self):
+        report = self.export(since=TIME + 1, until=TIME + 2)
+        document = json.loads((self.output / 'chatlab.json').read_text(encoding='utf-8'))
+        self.assertEqual([m['timestamp'] for m in document['messages']], [TIME + 1, TIME + 2])
+        self.assertEqual(report['system_records'], 1)
+        self.assertEqual(report['raw_records'], 2)
+        self.assertEqual(report['coverage']['source_records'], 7)
+        self.assertEqual(report['coverage']['available_first_timestamp'], TIME)
+        self.assertEqual(report['coverage']['available_last_timestamp'], TIME + 3)
+        self.assertFalse(report['coverage']['full_phone_history_verified'])
+        self.assertEqual(report['coverage']['selected_unique_messages'], 2)
+        raw = (self.output / 'raw_messages.jsonl').read_text(encoding='utf-8')
+        self.assertNotIn('测试文本', raw)
+
+    def test_out_of_window_bodies_and_sender_identities_are_not_processed(self):
+        row = list(self.rows['message_0.db'][0]); row[3] = 3; row[6] = b'\xff'
+        self.rows['message_0.db'][0] = tuple(row)
+        report = self.export(since=TIME + 1)
+        self.assertEqual(report['exported_messages'], 3)
+
+    def test_empty_requested_window_exposes_coverage_without_output(self):
+        with self.assertRaises(subject.ExportError) as caught:
+            self.export(since=TIME + 10)
+        self.assertEqual(caught.exception.code, 'empty_time_range')
+        self.assertEqual(caught.exception.details['coverage']['source_records'], 7)
+        self.assertEqual(caught.exception.details['coverage']['selected_records'], 0)
+        self.assertFalse(self.output.exists())
+
+    def test_empty_target_is_distinct_from_empty_window(self):
+        self.rows = {name: [] for name in self.rows}
+        with self.assertRaises(subject.ExportError) as caught:
+            self.export()
+        self.assertEqual(caught.exception.code, 'target_records_not_found')
+        self.assertEqual(caught.exception.details['coverage']['source_records'], 0)
+        self.assertFalse(self.output.exists())
+
+    def test_invalid_time_filter_fails_before_reading(self):
+        for bounds in ({'since': TIME + 1, 'until': TIME}, {'since': True}, {'until': 1.5}):
+            with patch.object(desktop_db_reader, 'read_decrypted_db') as reader:
+                with self.assertRaises(subject.ExportError):
+                    subject.export_chat(self.root, self.key_file, SELF, TARGET, self.output, **bounds)
+                reader.assert_not_called()
+
+    def test_file_and_memory_keys_are_mutually_exclusive(self):
+        with self.assertRaises(subject.ExportError) as caught:
+            self.export(key_mapping={})
+        self.assertEqual(caught.exception.code, 'invalid_key_mapping')
 
     def test_existing_output_is_untouched(self):
         self.output.mkdir()
